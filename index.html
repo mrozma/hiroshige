@@ -84,7 +84,8 @@ footer a { color: inherit; }
 
 /* ---- full-screen viewer (always night) ---- */
 .viewer { position: fixed; inset: 0; z-index: 10; background: var(--night); color: var(--night-ink); color-scheme: dark;
-  display: grid; grid-template-rows: auto 1fr auto; touch-action: pan-y pinch-zoom; }
+  height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr);
+  touch-action: pan-y pinch-zoom; }
 .viewer .stage { position: relative; min-height: 0; display: grid; place-items: center; overflow: hidden; }
 .viewer .stage img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: contain; pointer-events: none; transition: opacity .35s ease; }
 .viewer .stage img.out { opacity: 0; }
@@ -92,11 +93,17 @@ footer a { color: inherit; }
 .vfail a { color: inherit; }
 .viewer .spinner { grid-area: 1 / 1; width: 28px; height: 28px; border: 2px solid #ffffff22; border-top-color: var(--night-ink); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.bar { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px; transition: opacity .4s; }
-.bar.bottom { padding: 12px 20px calc(16px + env(safe-area-inset-bottom, 0px)); display: block; }
+.bar { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: none;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px; transition: opacity .4s; }
+.bar.bottom { padding: 12px 20px calc(16px + env(safe-area-inset-bottom, 0px)); display: block; overflow: visible; }
 .viewer.idle .bar, .viewer.idle .nav { opacity: 0; }
 .viewer.idle { cursor: none; }
-.bar .pos { font-size: 13px; letter-spacing: .08em; font-variant-numeric: tabular-nums; opacity: .7; margin-right: auto; }
+.bar .pos { font-size: 13px; letter-spacing: .08em; font-variant-numeric: tabular-nums; opacity: .7; margin-right: auto;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon { flex: none; }
+.short { display: none; }
+.icon[data-busy] > span { display: none; }
+.icon[data-busy]::after { content: "Setting…"; }
 .icon { font: inherit; font-size: 13px; color: var(--night-ink); background: #ffffff10; border: 1px solid #ffffff22; border-radius: 2px;
   padding: 7px 12px; cursor: pointer; }
 .icon:hover { background: #ffffff22; }
@@ -117,7 +124,21 @@ footer a { color: inherit; }
   font-size: 13px; line-height: 1.4; padding: 8px 12px; border-radius: 2px; background: var(--night-ink); color: var(--night); }
 .toast.error { background: #f0c9c2; color: #3b0d06; }
 @media (max-width: 560px) { .toast { left: 16px; right: 16px; max-width: none; bottom: calc(100% + 8px); } }
-@media (max-width: 560px) { .nav { display: none; } .keys { display: none; } }
+@media (max-width: 560px) {
+  .nav, .keys, #vfull { display: none; }
+  .long { display: none; } .short { display: inline; }
+  .bar { gap: 6px; padding-inline: 12px; }
+  .icon { padding: 6px 9px; }
+  .bar.bottom { padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .vtitle { font-size: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
+@media (max-height: 500px) {
+  .bar { padding-top: calc(6px + env(safe-area-inset-top, 0px)); padding-bottom: 6px; }
+  .bar.bottom { padding-top: 6px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .vtitle { font-size: 15px; -webkit-line-clamp: 1; }
+  .keys { display: none; }
+  .viewer:not(.info) .vsub { display: none; }
+}
 @media (prefers-reduced-motion: reduce) { .print img, .viewer .stage img { transition: none; } .print:hover img { transform: none; } }
 </style>
 </head>
@@ -142,10 +163,10 @@ footer a { color: inherit; }
     <span class="pos" id="vpos"></span>
     <button class="icon" id="vplay" aria-pressed="false">Play</button>
     <button class="icon" id="vshare">Share</button>
-    <button class="icon" id="vwall">Set as wallpaper</button>
+    <button class="icon" id="vwall"><span class="long">Set as wallpaper</span><span class="short">Wallpaper</span></button>
     <button class="icon" id="vinfo" aria-pressed="false">Info</button>
     <button class="icon" id="vfull">Full screen</button>
-    <button class="icon" id="vclose" aria-label="Close viewer">Close</button>
+    <button class="icon" id="vclose" aria-label="Close viewer"><span class="long">Close</span><span class="short" aria-hidden="true">✕</span></button>
   </div>
   <div class="stage" id="stage">
     <div class="spinner" id="spin"></div>
@@ -212,9 +233,10 @@ footer a { color: inherit; }
     next.onload = () => { if (cur.items[idx] !== it) return; VI.src = next.src; VI.alt = it.title; VI.classList.remove("out"); $("spin").hidden = true; };
     next.onerror = () => { if (cur.items[idx] !== it) return; $("spin").hidden = true; $("vfaillink").href = it.page; $("vfail").hidden = false; };
     next.src = it.src;
-    $("vpos").textContent = `${cur.name} · ${it.n} (${idx + 1} of ${n})`;
+    $("vpos").innerHTML = `<span class="long">${esc(cur.name)} · ${esc(it.n)} (${idx + 1} of ${n})</span><span class="short">${idx + 1} / ${n}</span>`;
     $("vtitle").textContent = it.title;
-    $("vsub").innerHTML = [fmtDate(it.date), `<span class="credit">${esc(it.credit || it.license)} · <a href="${esc(it.page)}" target="_blank" rel="noopener">Commons</a></span>`].filter(Boolean).join(" · ");
+    const date = esc(fmtDate(it.date));
+    $("vsub").innerHTML = `${date}<span class="credit">${date ? " · " : ""}${esc(it.credit || it.license)} · <a href="${esc(it.page)}" target="_blank" rel="noopener">Commons</a></span>`;
     preload(cur.items[(idx + 1) % n].src);
     preload(cur.items[(idx - 1 + n) % n].src);
     try { history.replaceState(null, "", "#" + it.id); } catch {}
@@ -259,6 +281,7 @@ footer a { color: inherit; }
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else (V.requestFullscreen?.() || Promise.reject()).catch(() => {});
   }
+  if (!document.fullscreenEnabled) $("vfull").hidden = true;
   document.addEventListener("fullscreenchange", () => { $("vfull").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; });
   // ---- wallpaper: one click through serve.py, otherwise download the original ----
   const originalUrl = it => it.src.replace("/thumb/", "/").replace(/\/[^/]+$/, "");
@@ -285,7 +308,7 @@ footer a { color: inherit; }
   async function setWallpaper() {
     if (busy) return;
     const it = cur.items[idx], btn = $("vwall");
-    busy = true; btn.disabled = true; btn.textContent = "Setting…";
+    busy = true; btn.disabled = true; btn.dataset.busy = "";
     try {
       if (await helper) {
         const dpr = window.devicePixelRatio || 1;
@@ -304,7 +327,7 @@ footer a { color: inherit; }
       toast(await helper ? "The gallery helper stopped responding. Restart python3 serve.py and try again."
                          : "The image could not be downloaded from Wikimedia. Check your connection and try again.", true);
     } finally {
-      busy = false; btn.disabled = false; btn.textContent = "Set as wallpaper";
+      busy = false; btn.disabled = false; delete btn.dataset.busy;
     }
   }
 
@@ -335,7 +358,10 @@ footer a { color: inherit; }
     if (sx === null) return;
     const dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) show(idx + (dx < 0 ? 1 : -1));
-    else if (e.pointerType !== "mouse") wake();
+    else if (e.pointerType !== "mouse" && !e.target.closest("button, a")) {
+      if (V.classList.contains("idle")) wake();
+      else { clearTimeout(idleT); V.classList.add("idle"); }
+    }
   });
 
   $("vprev").onclick = () => show(idx - 1);
